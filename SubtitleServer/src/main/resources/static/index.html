@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Speech to Text</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+    <main>
+        <h1>Speech to Text</h1>
+
+        <p id="status" aria-live="polite">Ready to record.</p>
+
+        <button id="startButton">Start Recording</button>
+        <button id="stopButton" disabled>Stop Recording</button>
+		
+		<audio id="audioPlayback"
+		       controls
+		       aria-label="Recorded audio playback"></audio>
+		
+        <h2>Transcription</h2>
+
+        <div id="transcription" aria-live="polite">
+            Your transcription will appear here.
+        </div>
+    </main>
+
+    <script src="script.js"></script>
+
+</body>
+</html>

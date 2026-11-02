@@ -1,0 +1,11 @@
+---
+:id: 1940076
+:submitters:
+- :name: Yosep Monier Nababan
+  :email: a1939679@adelaide.edu.au
+:created_at: !ruby/object:ActiveSupport::TimeWithZone
+  utc: 2026-10-23 09:19:23.688790000 Z
+  zone: !ruby/object:ActiveSupport::TimeZone
+    name: America/Los_Angeles
+  time: 2026-10-23 02:19:23.688790000 Z
+:status: processed

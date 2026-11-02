@@ -1,0 +1,23 @@
+# Maven build outputs
+target/
+*.class
+
+# Eclipse / Spring Tool Suite
+.project
+.classpath
+.settings/
+.metadata/
+
+# Other IDE files
+.idea/
+.vscode/
+
+# Logs and temporary files
+*.log
+*.tmp
+
+# API credentials
+key.txt
+.env
+.env.*
+application-local.properties
