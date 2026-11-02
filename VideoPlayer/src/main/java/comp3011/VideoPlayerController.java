@@ -8,6 +8,8 @@
  *
  * Copyright 2026 Simon Ratcliffe
  *
+ * Assignment 3 changes: Connect the subtitle button and S shortcut to the model state.
+ *
  * Changes: pass the requested effect configuration from the command line
  * through the controller to the video-processing model.
  */
@@ -56,7 +58,10 @@ public class VideoPlayerController {
         view.getForwardFiveButton().setOnAction(_ -> forwardFiveSeconds());
         view.getStopButton().setOnAction(_ -> stopAndExit());
         view.getAudioButton().setOnAction(_ -> toggleAudioOutput());
+        view.getSubtitleButton().setOnAction(_ -> toggleSubtitles());
         view.showAudioEnabled(model.isAudioOutputEnabled());
+        view.setSubtitlesAvailable(model.isSubtitlesAvailable());
+        view.showSubtitlesEnabled(model.isSubtitlesEnabled());
     }
 
     public void installKeyboardShortcuts(Scene scene) {
@@ -78,6 +83,9 @@ public class VideoPlayerController {
                 event.consume();
             } else if (event.getCode() == KeyCode.A) {
                 toggleAudioOutput();
+                event.consume();
+            } else if (event.getCode() == KeyCode.S) {
+                toggleSubtitles();
                 event.consume();
             }
         });
@@ -114,6 +122,15 @@ public class VideoPlayerController {
 
     private void toggleAudioOutput() {
         model.toggleAudioOutput();
+    }
+
+    private void toggleSubtitles() {
+        // No shortcut action unless subtitles were requested on the command line.
+        if (!model.isSubtitlesAvailable()) {
+            return;
+        }
+        model.toggleSubtitles();
+        view.showSubtitlesEnabled(model.isSubtitlesEnabled());
     }
 
     private void stopAndExit() {

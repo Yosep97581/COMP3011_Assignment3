@@ -8,6 +8,8 @@
  *
  * Copyright 2026 Simon Ratcliffe
  *
+ * Assignment 3 changes: Maintain subtitle availability and user toggle state during playback.
+ *
  * Changes: create the ordered list of visual processors from the supplied
  * effect configuration rather than from hard-coded commented-out lines.
  * Assign stable indexes for repeated effects (used by parallel workers later).
@@ -59,6 +61,8 @@ public class VideoPlayerModel {
     // visual effects were selected at all.
     private final boolean singleThreaded;
     private final List<FrameEffect> selectedEffects;
+    private final boolean subtitlesAvailable;
+    private boolean subtitlesEnabled;
 
     private final List<FrameProcessor> frameProcessors;
     private final Queue<PendingAudio> pendingAudio = new ArrayDeque<>();
@@ -135,6 +139,8 @@ public class VideoPlayerModel {
         // Each command-line occurrence creates a separate effect instance.
         // Keeping the order is important because effects modify the same frame.
         this.selectedEffects = List.copyOf(effects);
+        subtitlesAvailable = selectedEffects.contains(FrameEffect.SUBTITLE);
+        subtitlesEnabled = subtitlesAvailable;
         this.singleThreaded = Boolean.getBoolean("video.singleThreaded")
                 || Boolean.parseBoolean(System.getenv("VIDEO_SINGLE_THREADED"))
                 || selectedEffects.isEmpty();
@@ -195,6 +201,22 @@ public class VideoPlayerModel {
 
     public boolean isAudioOutputEnabled() {
         return audioOutputEnabled;
+    }
+
+    public boolean isSubtitlesAvailable() {
+        return subtitlesAvailable;
+    }
+
+    public boolean isSubtitlesEnabled() {
+        return subtitlesEnabled;
+    }
+
+    public void toggleSubtitles() {
+        // Keep this state across pause and seek. The frame renderer will read it
+        // in the next milestone when timed subtitle text is implemented.
+        if (subtitlesAvailable) {
+            subtitlesEnabled = !subtitlesEnabled;
+        }
     }
 
     public void stopPlayback() {

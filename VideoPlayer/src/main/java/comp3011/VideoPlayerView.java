@@ -4,9 +4,11 @@
  * 
  * Authors:
  *   1. Simon Ratcliffe, in collaboration with GPT-5.6 Terra
- *   2. <student name and student number insert here upon modification>
+ *   2. Yosep Monier Nababan (a1939679), with assistance from OpenAI ChatGPT
  *
  * Copyright 2026 Simon Ratcliffe
+ *
+ * Assignment 3 changes: subtitle button and on/off icon state.
  */
 package comp3011;
 
@@ -30,6 +32,8 @@ import javafx.scene.shape.Line;
 import javafx.scene.shape.Polygon;
 import javafx.scene.shape.SVGPath;
 import javafx.scene.shape.StrokeLineCap;
+import javafx.scene.text.Font;
+import javafx.scene.text.FontWeight;
 
 /**
  * The view part of the video player model-view-controller architecture.
@@ -57,6 +61,9 @@ public class VideoPlayerView {
     private final Button forwardFiveButton;
     private final Button stopButton;
     private final Button audioButton;
+    private final Button subtitleButton;
+    private boolean playbackControlsDisabled = true;
+    private boolean subtitlesAvailable;
 
     public VideoPlayerView() {
         imageView.setPreserveRatio(true);
@@ -75,6 +82,7 @@ public class VideoPlayerView {
         forwardFiveButton = iconButton(createLoopIcon(true, "5"));
         stopButton = iconButton(createStopIcon());
         audioButton = iconButton(createAudioIcon(false));
+        subtitleButton = iconButton(createSubtitleIcon(false));
         setPlaybackControlsDisabled(true);
 
         HBox controls = new HBox(
@@ -85,6 +93,7 @@ public class VideoPlayerView {
                 forwardFiveButton,
                 stopButton,
                 audioButton,
+                subtitleButton,
                 statusLabel);
 
         controls.setPadding(new Insets(10));
@@ -127,6 +136,10 @@ public class VideoPlayerView {
         return audioButton;
     }
 
+    public Button getSubtitleButton() {
+        return subtitleButton;
+    }
+
     public void setStatus(String status) {
         statusLabel.setText(status);
     }
@@ -151,13 +164,26 @@ public class VideoPlayerView {
         audioButton.setGraphic(createAudioIcon(audioEnabled));
     }
 
+    // A new button beside mute, only usable when -s / --subtitle-frames was supplied.
+    public void setSubtitlesAvailable(boolean available) {
+        subtitlesAvailable = available;
+        subtitleButton.setDisable(playbackControlsDisabled || !subtitlesAvailable);
+    }
+
+    public void showSubtitlesEnabled(boolean enabled) {
+        subtitleButton.setGraphic(createSubtitleIcon(enabled));
+        subtitleButton.setAccessibleText(enabled ? "Subtitles on" : "Subtitles off");
+    }
+
     public void setPlaybackControlsDisabled(boolean disabled) {
+        playbackControlsDisabled = disabled;
         startOverButton.setDisable(disabled);
         backFiveButton.setDisable(disabled);
         pausePlayButton.setDisable(disabled);
         forwardFiveButton.setDisable(disabled);
         stopButton.setDisable(disabled);
         audioButton.setDisable(disabled);
+        subtitleButton.setDisable(disabled || !subtitlesAvailable);
     }
 
     // There are a bunch of tooltip handling methods starting from here. We want to use tooltips so that people with
@@ -169,6 +195,7 @@ public class VideoPlayerView {
         setButtonTooltip(forwardFiveButton, "[RIGHT]");
         setButtonTooltip(stopButton, "[ESC]");
         setButtonTooltip(audioButton, "[A]");
+        setButtonTooltip(subtitleButton, "[S] Subtitles");
     }
 
     private void setButtonTooltip(Button button, String text) {
@@ -347,6 +374,29 @@ public class VideoPlayerView {
         wave.setStrokeWidth(2.0);
         wave.setStrokeLineCap(StrokeLineCap.ROUND);
         return wave;
+    }
+
+    // A simple CC symbol with a slash when subtitles are turned off.
+    // Drawing it here keeps the same button size and style as the original controls.
+    private Canvas createSubtitleIcon(boolean enabled) {
+        Canvas canvas = new Canvas(ICON_SIZE, ICON_SIZE);
+        GraphicsContext gc = canvas.getGraphicsContext2D();
+        if (enabled) {
+            gc.setFill(Color.BLACK);
+            gc.fillRoundRect(3, 6, 22, 16, 3, 3);
+        }
+        gc.setStroke(Color.BLACK);
+        gc.setLineWidth(1.8);
+        gc.strokeRoundRect(3, 6, 22, 16, 3, 3);
+        gc.setFill(enabled ? Color.WHITE : Color.BLACK);
+        gc.setFont(Font.font("System", FontWeight.BOLD, 11));
+        gc.fillText("CC", 6.5, 17.5);
+        if (!enabled) {
+            gc.setStroke(Color.DIMGRAY);
+            gc.setLineWidth(2.3);
+            gc.strokeLine(5, 23, 23, 5);
+        }
+        return canvas;
     }
 
     // Helper to draw a cross over the speaker indicating that we're muted.
