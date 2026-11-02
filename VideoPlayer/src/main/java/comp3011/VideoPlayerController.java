@@ -50,7 +50,8 @@ public class VideoPlayerController {
                 this::onFrameReady,
                 this::onStatusChanged,
                 this::onPlaybackStateChanged,
-                this::onAudioOutputStateChanged);
+                this::onAudioOutputStateChanged,
+                this::onSubtitleTextChanged);
 
         view.getStartOverButton().setOnAction(_ -> startOver());
         view.getBackFiveButton().setOnAction(_ -> backFiveSeconds());
@@ -156,6 +157,10 @@ public class VideoPlayerController {
         } else {
             view.showPlayAction();
         }
+    }
+
+    private void onSubtitleTextChanged(String text) {
+        view.showSubtitleText(text);
     }
 
     private void onAudioOutputStateChanged(boolean audioOutputEnabled) {

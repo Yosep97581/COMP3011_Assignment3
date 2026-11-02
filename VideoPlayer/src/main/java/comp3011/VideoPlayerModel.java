@@ -63,6 +63,9 @@ public class VideoPlayerModel {
     private final List<FrameEffect> selectedEffects;
     private final boolean subtitlesAvailable;
     private boolean subtitlesEnabled;
+    private final SubtitleTrack subtitleTrack = SubtitleTrack.demo();
+    // Avoid sending the same caption to JavaFX for every video frame.
+    private String lastSubtitleText = "";
 
     private final List<FrameProcessor> frameProcessors;
     private final Queue<PendingAudio> pendingAudio = new ArrayDeque<>();
@@ -71,6 +74,7 @@ public class VideoPlayerModel {
     private final Consumer<String> statusChangedHandler;
     private final BiConsumer<Boolean, Boolean> playbackStateChangedHandler;
     private final Consumer<Boolean> audioOutputStateChangedHandler;
+    private final Consumer<String> subtitleTextChangedHandler;
 
     // This is the critical wiring that allows the framework (JavaFX) to call
     // into our model logic every time it goes around its event loop. Every GUI
@@ -129,13 +133,15 @@ public class VideoPlayerModel {
             Consumer<Image> frameReadyHandler,
             Consumer<String> statusChangedHandler,
             BiConsumer<Boolean, Boolean> playbackStateChangedHandler,
-            Consumer<Boolean> audioOutputStateChangedHandler) {
+            Consumer<Boolean> audioOutputStateChangedHandler,
+            Consumer<String> subtitleTextChangedHandler) {
         audioOutputEnabled = audioEnabled;
         this.videoSizeChangedHandler = videoSizeChangedHandler;
         this.frameReadyHandler = frameReadyHandler;
         this.statusChangedHandler = statusChangedHandler;
         this.playbackStateChangedHandler = playbackStateChangedHandler;
         this.audioOutputStateChangedHandler = audioOutputStateChangedHandler;
+        this.subtitleTextChangedHandler = subtitleTextChangedHandler;
         // Each command-line occurrence creates a separate effect instance.
         // Keeping the order is important because effects modify the same frame.
         this.selectedEffects = List.copyOf(effects);
@@ -212,10 +218,10 @@ public class VideoPlayerModel {
     }
 
     public void toggleSubtitles() {
-        // Keep this state across pause and seek. The frame renderer will read it
-        // in the next milestone when timed subtitle text is implemented.
         if (subtitlesAvailable) {
             subtitlesEnabled = !subtitlesEnabled;
+            // Update immediately, including when the video is paused.
+            updateSubtitleText();
         }
     }
 
@@ -225,11 +231,13 @@ public class VideoPlayerModel {
         pauseRequested = false;
         notifyStatusChanged("Stopped");
         notifyFrameReady(null);
+        publishSubtitleText("");
         notifyPlaybackStateChanged();
     }
 
     public void shutdown() {
         closePlaybackResources();
+        publishSubtitleText("");
     }
 
     private void seekRelative(long offsetUs) {
@@ -277,6 +285,7 @@ public class VideoPlayerModel {
         relativeSeekBaseUs = initialRelativeSeekBaseUs;
 
         notifyStatusChanged(videoFile.getName());
+        publishSubtitleText("");
 
         try {
             openPlaybackResources(startTimestampUs);
@@ -328,6 +337,8 @@ public class VideoPlayerModel {
         resetProcessingPipeline();
         currentTimestampUs = logicalTimestampUs;
         relativeSeekBaseUs = logicalTimestampUs;
+        // Hide captions from the previous location until its replacement frame arrives.
+        publishSubtitleText("");
         firstTimestampUs = NO_SEEK_REQUEST;
         framesDisplayed = 0;
         latePreparedFrames = 0;
@@ -641,6 +652,7 @@ public class VideoPlayerModel {
         }
 
         notifyFrameReady(frame.image());
+        updateSubtitleText();
     }
 
     private void queueAudio(long timestampUs, Frame frame) {
@@ -695,6 +707,7 @@ public class VideoPlayerModel {
         currentTimestampUs = endTimestampUs;
         relativeSeekBaseUs = endTimestampUs;
         notifyStatusChanged("Playback finished");
+        publishSubtitleText("");
         notifyPlaybackStateChanged();
     }
 
@@ -703,6 +716,7 @@ public class VideoPlayerModel {
         closePlaybackResources();
         pauseRequested = false;
         notifyStatusChanged("Error: " + e.getMessage());
+        publishSubtitleText("");
         notifyPlaybackStateChanged();
     }
 
@@ -829,6 +843,24 @@ public class VideoPlayerModel {
 
     private void notifyAudioOutputStateChanged() {
         audioOutputStateChangedHandler.accept(audioOutputEnabled);
+    }
+
+    private void updateSubtitleText() {
+        // framesDisplayed is reset on a seek, so old cues do not flash while
+        // waiting for the next frame to reach the screen.
+        String text = subtitlesEnabled && framesDisplayed > 0
+                ? subtitleTrack.textAt(currentTimestampUs) : "";
+        publishSubtitleText(text);
+    }
+
+    private void publishSubtitleText(String text) {
+        // Subtitles usually stay unchanged for several seconds. Only notify
+        // the view when entering/leaving a cue or when CC is toggled/seeked.
+        if (text.equals(lastSubtitleText)) {
+            return;
+        }
+        lastSubtitleText = text;
+        subtitleTextChangedHandler.accept(text);
     }
 
     private record PreparedFrame(

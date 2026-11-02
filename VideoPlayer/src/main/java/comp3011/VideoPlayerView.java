@@ -32,8 +32,12 @@ import javafx.scene.shape.Line;
 import javafx.scene.shape.Polygon;
 import javafx.scene.shape.SVGPath;
 import javafx.scene.shape.StrokeLineCap;
+import javafx.scene.shape.StrokeType;
+import javafx.scene.CacheHint;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
+import javafx.scene.text.Text;
+import javafx.scene.text.TextAlignment;
 
 /**
  * The view part of the video player model-view-controller architecture.
@@ -50,6 +54,7 @@ public class VideoPlayerView {
     private static final int ICON_SIZE = 28;
 
     private final ImageView imageView = new ImageView();
+    private final Text subtitleText = new Text();
     private final Label statusLabel = new Label("No video loaded");
     private final Label tooltipLabel = new Label();
     private final Pane tooltipLayer = new Pane();
@@ -69,7 +74,24 @@ public class VideoPlayerView {
         imageView.setPreserveRatio(true);
         imageView.setSmooth(false);
 
-        videoPane = new StackPane(imageView);
+        // Keep captions above the video, but out of the mouse/keyboard controls.
+        // A view overlay lets the CC button hide text even while playback is paused.
+        subtitleText.setFill(Color.WHITE);
+        subtitleText.setStroke(Color.BLACK);
+        subtitleText.setStrokeWidth(2.5);
+        subtitleText.setStrokeType(StrokeType.OUTSIDE);
+        subtitleText.setFont(Font.font("Arial", FontWeight.BOLD, 28));
+        subtitleText.setTextAlignment(TextAlignment.CENTER);
+        subtitleText.setMouseTransparent(true);
+        // Cache the rendered letters/outline between caption changes.
+        subtitleText.setCache(true);
+        subtitleText.setCacheHint(CacheHint.SPEED);
+        subtitleText.setVisible(false);
+
+        videoPane = new StackPane(imageView, subtitleText);
+        subtitleText.wrappingWidthProperty().bind(videoPane.widthProperty().subtract(64));
+        StackPane.setAlignment(subtitleText, Pos.BOTTOM_CENTER);
+        StackPane.setMargin(subtitleText, new Insets(0, 32, 28, 32));
         videoPane.setStyle("-fx-background-color: black;");
         videoPane.setMinSize(0, 0);
         videoPane.setMaxSize(Double.MAX_VALUE, Double.MAX_VALUE);
@@ -146,6 +168,17 @@ public class VideoPlayerView {
 
     public void setImage(Image image) {
         imageView.setImage(image);
+    }
+
+    public void showSubtitleText(String text) {
+        // Avoid re-layout and re-rendering the same text for every video frame.
+        // An empty string means no subtitle is active at this timestamp.
+        String nextText = text == null ? "" : text;
+        if (nextText.equals(subtitleText.getText())) {
+            return;
+        }
+        subtitleText.setText(nextText);
+        subtitleText.setVisible(!nextText.isEmpty());
     }
 
     public void setVideoDisplaySize(double width, double height) {
