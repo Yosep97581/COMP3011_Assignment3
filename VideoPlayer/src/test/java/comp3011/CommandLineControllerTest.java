@@ -61,23 +61,51 @@ class CommandLineControllerTest {
     void supportsAllElevenEffects() throws IOException {
         File file = sampleVideo();
         CommandLineController cli = new CommandLineController(new String[] {
-                "-nsfwyvdjmbp", file.getPath()
+                "-nSfwyvdjmbp", file.getPath()
         });
         assertEquals(11, cli.getEffects().size());
-        assertEquals(List.of(FrameEffect.values()), cli.getEffects());
+        assertEquals(List.of(
+                FrameEffect.NUMBER, FrameEffect.SCRATCH, FrameEffect.FLICKER,
+                FrameEffect.BLACK_AND_WHITE, FrameEffect.YELLOW, FrameEffect.VIGNETTE,
+                FrameEffect.DUST, FrameEffect.JITTER, FrameEffect.MOTTLE,
+                FrameEffect.BLEED, FrameEffect.PEPPER), cli.getEffects());
     }
 
     @Test
     void preservesExistingPlaybackOptions() throws IOException {
         File file = sampleVideo();
         CommandLineController cli = new CommandLineController(new String[] {
-                "-ax1", "-sn", file.getPath()
+                "-ax1", "-Sn", file.getPath()
         });
         assertTrue(cli.shouldLaunchApplication());
         assertTrue(cli.isAudioRequested());
         assertTrue(cli.isMaximiseRequested());
         assertEquals(Integer.valueOf(1), cli.getDisplayId());
         assertEquals(List.of(FrameEffect.SCRATCH, FrameEffect.NUMBER), cli.getEffects());
+    }
+
+    @Test
+    void recognisesSubtitleShortAndLongOptions() throws IOException {
+        File file = sampleVideo();
+        CommandLineController cli = new CommandLineController(new String[] {
+                "-s", "--subtitle-frames", "-S", file.getPath()
+        });
+
+        assertTrue(cli.shouldLaunchApplication());
+        assertEquals(List.of(FrameEffect.SUBTITLE, FrameEffect.SUBTITLE,
+                FrameEffect.SCRATCH), cli.getEffects());
+    }
+
+    @Test
+    void subtitleOptionWorksInStackedFlags() throws IOException {
+        File file = sampleVideo();
+        CommandLineController cli = new CommandLineController(new String[] {
+                "-ans", file.getPath()
+        });
+
+        assertTrue(cli.shouldLaunchApplication());
+        assertTrue(cli.isAudioRequested());
+        assertEquals(List.of(FrameEffect.NUMBER, FrameEffect.SUBTITLE), cli.getEffects());
     }
 
     @Test

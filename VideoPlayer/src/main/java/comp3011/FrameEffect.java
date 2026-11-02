@@ -19,7 +19,7 @@ import java.util.function.Supplier;
  */
 public enum FrameEffect {
     NUMBER('n', "number-frames", "Render the frame number onto each frame", FrameNumberer::new),
-    SCRATCH('s', "scratch-frames", "Render vertical film scratches", FrameScratcher::new),
+    SCRATCH('S', "scratch-frames", "Render vertical film scratches", FrameScratcher::new),
     FLICKER('f', "flicker-frames", "Randomly dim frames", FrameFlickerer::new),
     BLACK_AND_WHITE('w', "black-and-white", "Convert frames to black and white", FrameBlackAndWhiter::new),
     YELLOW('y', "yellow-frames", "Apply a warmer colour temperature", FrameYellower::new),
@@ -28,7 +28,8 @@ public enum FrameEffect {
     JITTER('j', "jitter-frames", "Randomly displace frames by a few pixels", FrameJitterer::new),
     MOTTLE('m', "mottle-frames", "Add cloudy emulsion mottling", FrameMottler::new),
     BLEED('b', "bleed-frames", "Bleed light into frames", FrameBleeder::new),
-    PEPPER('p', "pepper-frames", "Pepper frames with dark spots/blotches", FramePepperer::new);
+    PEPPER('p', "pepper-frames", "Pepper frames with dark spots/blotches", FramePepperer::new),
+    SUBTITLE('s', "subtitle-frames", "Add speech-to-text subtitles to frames", FrameSubtitler::new);
 
     private final char shortOption;
     private final String longOption;
