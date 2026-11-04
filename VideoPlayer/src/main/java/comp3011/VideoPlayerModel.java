@@ -66,6 +66,11 @@ public class VideoPlayerModel {
     private final boolean subtitlesAvailable;
     private boolean subtitlesEnabled;
     private SubtitleTrack subtitleTrack = new SubtitleTrack(List.of());
+    // A successful request can legitimately produce zero captions; remember that too.
+    private boolean subtitleTrackLoaded;
+    private MediaAvailabilityMonitor mediaMonitor;
+    private long mediaMonitorGeneration;
+    private MediaAvailabilityMonitor.MediaIdentity openedMediaIdentity;
     private final SubtitleClient subtitleClient = new SubtitleClient();
     private CompletableFuture<SubtitleTrack> subtitleRequest;
     private long subtitleRequestGeneration;
@@ -161,7 +166,9 @@ public class VideoPlayerModel {
     public void play(File file) {
         cancelSubtitleRequest();
         subtitleTrack = new SubtitleTrack(List.of());
+        subtitleTrackLoaded = false;
         videoFile = file;
+        openedMediaIdentity = MediaAvailabilityMonitor.identity(file.toPath());
         videoDurationUs = NO_SEEK_REQUEST;
         videoFrameDurationUs = 0;
         startPlayback(0, false, NO_SEEK_REQUEST);
@@ -189,7 +196,8 @@ public class VideoPlayerModel {
     public void togglePause() {
         if (!playbackOpen) {
             if (videoFile != null) {
-                startPlayback(displayableSeekTimestamp(currentTimestampUs), false, currentTimestampUs);
+                resumeStoppedPlayback(displayableSeekTimestamp(currentTimestampUs),
+                        false, currentTimestampUs);
             }
             return;
         }
@@ -273,6 +281,7 @@ public class VideoPlayerModel {
                 return;
             }
             subtitleTrack = track;
+            subtitleTrackLoaded = true;
             System.out.println("Subtitles: transcription received.");
             updateSubtitleText(); // Use the current position, even after seeking.
         }));
@@ -302,7 +311,7 @@ public class VideoPlayerModel {
         long grabTimestampUs = displayableSeekTimestamp(logicalTimestampUs);
 
         if (!playbackOpen) {
-            startPlayback(grabTimestampUs, pauseRequested, logicalTimestampUs);
+            resumeStoppedPlayback(grabTimestampUs, pauseRequested, logicalTimestampUs);
             return;
         }
 
@@ -317,6 +326,37 @@ public class VideoPlayerModel {
             notifyPlaybackStateChanged();
         } catch (Exception e) {
             handlePlaybackError(e);
+        }
+    }
+
+    /**
+     * Resume after media removal, or restart after normal end-of-video.
+     * If a different file appeared at the same path, old subtitles are invalid.
+     */
+    private void resumeStoppedPlayback(long seekTimestampUs, boolean initiallyPaused,
+            long logicalTimestampUs) {
+        MediaAvailabilityMonitor.MediaIdentity restoredIdentity =
+                MediaAvailabilityMonitor.identity(videoFile.toPath());
+        if (restoredIdentity == null) {
+            notifyStatusChanged("Media unavailable. Reconnect it, then press Space to retry.");
+            return;
+        }
+        if (openedMediaIdentity != null && !openedMediaIdentity.equals(restoredIdentity)) {
+            System.out.println("Media: different file found; restarting and refreshing subtitles.");
+            cancelSubtitleRequest();
+            subtitleTrack = new SubtitleTrack(List.of());
+            subtitleTrackLoaded = false;
+            seekTimestampUs = 0;
+            logicalTimestampUs = 0;
+            videoDurationUs = NO_SEEK_REQUEST;
+            videoFrameDurationUs = 0;
+        }
+        openedMediaIdentity = restoredIdentity;
+        startPlayback(seekTimestampUs, initiallyPaused, logicalTimestampUs);
+        // Media removal can interrupt extraction. A completed track can be reused.
+        if (playbackOpen && audioAvailable && subtitlesAvailable && !subtitleTrackLoaded
+                && (subtitleRequest == null || subtitleRequest.isDone())) {
+            requestCloudSubtitles(videoFile);
         }
     }
 
@@ -337,6 +377,7 @@ public class VideoPlayerModel {
             openPlaybackResources(startTimestampUs);
             resetPlaybackClock(currentTimestampUs);
             playbackOpen = true;
+            beginMediaAvailabilityChecks();
             playbackTimer.start();
             prepareNextFrame();
             notifyPlaybackStateChanged();
@@ -451,7 +492,11 @@ public class VideoPlayerModel {
         for (int i = 0; i < DECODE_STEPS_PER_PULSE; i++) {
             Frame frame = grabFrame();
             if (frame == null) {
-                reachedVideoEnd = true;
+                if (!MediaAvailabilityMonitor.isAvailable(videoFile.toPath())) {
+                    handleMediaUnavailable();
+                } else {
+                    reachedVideoEnd = true;
+                }
                 return;
             }
 
@@ -544,7 +589,11 @@ public class VideoPlayerModel {
         while (playbackOpen) {
             Frame frame = grabFrame();
             if (frame == null) {
-                finishPlayback();
+                if (!MediaAvailabilityMonitor.isAvailable(videoFile.toPath())) {
+                    handleMediaUnavailable();
+                } else {
+                    finishPlayback();
+                }
                 return null;
             }
 
@@ -744,6 +793,12 @@ public class VideoPlayerModel {
     }
 
     private void finishPlayback() {
+        // Reaching the last decoded frame because a USB drive vanished is not
+        // the same as finishing a film normally.
+        if (videoFile != null && !MediaAvailabilityMonitor.isAvailable(videoFile.toPath())) {
+            handleMediaUnavailable();
+            return;
+        }
         long endTimestampUs = videoDurationUs != NO_SEEK_REQUEST
                 ? videoDurationUs
                 : currentTimestampUs;
@@ -757,7 +812,42 @@ public class VideoPlayerModel {
         notifyPlaybackStateChanged();
     }
 
+    /**
+     * Check removable media off the JavaFX event loop. The monitor only checks
+     * file availability; FFmpeg decoder ownership stays on the playback thread.
+     */
+    private void beginMediaAvailabilityChecks() {
+        final File watchedFile = videoFile;
+        final long generation = ++mediaMonitorGeneration;
+        mediaMonitor = new MediaAvailabilityMonitor(watchedFile.toPath(), () ->
+                Platform.runLater(() -> {
+                    if (generation == mediaMonitorGeneration && playbackOpen
+                            && watchedFile.equals(videoFile)) {
+                        handleMediaUnavailable();
+                    }
+                }));
+    }
+
+    /**
+     * Stop cleanly if the USB/file disappears. Keep the final displayed frame,
+     * playback position, and completed subtitle track for a manual resume.
+     */
+    private void handleMediaUnavailable() {
+        System.err.println("Playback: media file is unavailable; reconnect it to resume.");
+        cancelSubtitleRequest();
+        closePlaybackResources();
+        pauseRequested = true;
+        relativeSeekBaseUs = currentTimestampUs;
+        publishSubtitleText("");
+        notifyStatusChanged("Media unavailable. Reconnect it, then press Space to retry.");
+        notifyPlaybackStateChanged();
+    }
+
     private void handlePlaybackError(Exception e) {
+        if (videoFile != null && !MediaAvailabilityMonitor.isAvailable(videoFile.toPath())) {
+            handleMediaUnavailable();
+            return;
+        }
         e.printStackTrace();
         closePlaybackResources();
         pauseRequested = false;
@@ -767,6 +857,12 @@ public class VideoPlayerModel {
     }
 
     private void closePlaybackResources() {
+        // Invalidate callbacks already queued by a previous media monitor.
+        mediaMonitorGeneration++;
+        if (mediaMonitor != null) {
+            mediaMonitor.close();
+            mediaMonitor = null;
+        }
         if (framesDisplayed > 0) {
             double latePercent = 100.0 * latePreparedFrames / framesDisplayed;
             long meanHeadroomUs = totalFrameHeadroomUs / framesDisplayed;
