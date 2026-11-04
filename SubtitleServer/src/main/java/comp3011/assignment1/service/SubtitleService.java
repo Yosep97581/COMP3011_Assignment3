@@ -3,6 +3,9 @@
 package comp3011.assignment1.service;
 
 import java.io.IOException;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.HexFormat;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -30,6 +33,9 @@ public class SubtitleService {
     private final RestClient restClient;
     private final String apiKey;
     private final SubtitleUsageService usageService;
+    // Successful results only. Concurrent clients share one Whisper request.
+    // Caching is per server process and is intentionally memory-bounded.
+    private final SubtitleResponseCache cache = new SubtitleResponseCache(24);
 
     public SubtitleService(
             RestClient.Builder builder,
@@ -51,12 +57,23 @@ public class SubtitleService {
         // Preserve an actual supported extension for OpenAI's audio format detection.
         String filename = safeAudioFilename(audioFile.getOriginalFilename());
 
-        // Do not put the key in the repository or send it back to the video player.
+        byte[] audioBytes = audioFile.getBytes();
+        if (audioBytes.length == 0 || audioBytes.length > MAX_AUDIO_BYTES) {
+            throw new IllegalArgumentException("Audio must be non-empty and 25 MB or smaller.");
+        }
+        // Identical audio bytes map to one cache key, independent of the
+        // uploading client or the name of its media file.
+        String audioHash = sha256(audioBytes);
+        return cache.getOrLoad(audioHash, () -> requestWhisper(audioBytes, filename));
+    }
+
+    private SubtitleResponse requestWhisper(byte[] audioBytes, String filename) {
+        // Cache hits work even without a configured key. New audio requires one.
         if (apiKey == null || apiKey.isBlank()) {
             throw new MissingApiKeyException();
         }
 
-        ByteArrayResource audioResource = new ByteArrayResource(audioFile.getBytes()) {
+        ByteArrayResource audioResource = new ByteArrayResource(audioBytes) {
             @Override
             public String getFilename() {
                 return filename;
@@ -70,7 +87,6 @@ public class SubtitleService {
         body.add("timestamp_granularities[]", "word");
         body.add("timestamp_granularities[]", "segment");
 
-        // This REST call runs in the Spring server, not the JavaFX playback thread.
         JsonNode result = restClient.post()
                 .uri("/v1/audio/transcriptions")
                 .header("Authorization", "Bearer " + apiKey)
@@ -81,13 +97,22 @@ public class SubtitleService {
 
         SubtitleResponse subtitles = parseResponse(result);
 
-        // Count only successful API requests, using usage.seconds when provided.
+        // This runs only for a real successful Whisper call, not for cache hits.
         JsonNode apiUsage = result.path("usage").path("seconds");
         double seconds = apiUsage.isNumber()
                 ? apiUsage.asDouble()
                 : subtitles.duration();
         usageService.addSeconds(seconds);
         return subtitles;
+    }
+
+    private static String sha256(byte[] audioBytes) {
+        try {
+            byte[] digest = MessageDigest.getInstance("SHA-256").digest(audioBytes);
+            return HexFormat.of().formatHex(digest);
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException("SHA-256 is unavailable.", e);
+        }
     }
 
     private static String safeAudioFilename(String originalName) {
