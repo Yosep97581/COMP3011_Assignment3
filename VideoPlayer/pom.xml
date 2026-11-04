@@ -24,9 +24,16 @@
     <javafx.version>26.0.2</javafx.version>
     <javacv.version>1.5.13</javacv.version>
     <junit.version>5.11.4</junit.version>
+    <jackson.version>2.18.3</jackson.version>
   </properties>
 
   <dependencies>
+    <!-- Parse timed subtitle JSON returned by our Spring Boot server. -->
+    <dependency>
+      <groupId>com.fasterxml.jackson.core</groupId>
+      <artifactId>jackson-databind</artifactId>
+      <version>${jackson.version}</version>
+    </dependency>
     <dependency>
       <groupId>org.openjfx</groupId>
       <artifactId>javafx-controls</artifactId>

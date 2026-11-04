@@ -24,6 +24,8 @@ import java.io.File;
 import java.util.ArrayDeque;
 import java.util.List;
 import java.util.Queue;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 
@@ -63,7 +65,10 @@ public class VideoPlayerModel {
     private final List<FrameEffect> selectedEffects;
     private final boolean subtitlesAvailable;
     private boolean subtitlesEnabled;
-    private final SubtitleTrack subtitleTrack = SubtitleTrack.demo();
+    private SubtitleTrack subtitleTrack = new SubtitleTrack(List.of());
+    private final SubtitleClient subtitleClient = new SubtitleClient();
+    private CompletableFuture<SubtitleTrack> subtitleRequest;
+    private long subtitleRequestGeneration;
     // Avoid sending the same caption to JavaFX for every video frame.
     private String lastSubtitleText = "";
 
@@ -154,10 +159,15 @@ public class VideoPlayerModel {
     }
 
     public void play(File file) {
+        cancelSubtitleRequest();
+        subtitleTrack = new SubtitleTrack(List.of());
         videoFile = file;
         videoDurationUs = NO_SEEK_REQUEST;
         videoFrameDurationUs = 0;
         startPlayback(0, false, NO_SEEK_REQUEST);
+        if (playbackOpen && subtitlesAvailable && audioAvailable) {
+            requestCloudSubtitles(file);
+        }
     }
 
     public void startOver() {
@@ -226,6 +236,7 @@ public class VideoPlayerModel {
     }
 
     public void stopPlayback() {
+        cancelSubtitleRequest();
         closePlaybackResources();
         currentTimestampUs = 0;
         pauseRequested = false;
@@ -236,8 +247,43 @@ public class VideoPlayerModel {
     }
 
     public void shutdown() {
+        cancelSubtitleRequest();
+        subtitleClient.close();
         closePlaybackResources();
         publishSubtitleText("");
+    }
+
+    /**
+     * Transcription can be slow, so do the entire process outside JavaFX.
+     * Only publish the result if the user is still watching the same video.
+     */
+    private void requestCloudSubtitles(File file) {
+        long generation = ++subtitleRequestGeneration;
+        System.out.println("Subtitles: extracting audio and requesting cloud transcription...");
+        subtitleRequest = subtitleClient.requestSubtitles(file);
+        subtitleRequest.whenComplete((track, error) -> Platform.runLater(() -> {
+            if (generation != subtitleRequestGeneration || !file.equals(videoFile)) {
+                return; // Ignore a response from a previous video.
+            }
+            if (error != null) {
+                Throwable cause = error instanceof CompletionException && error.getCause() != null
+                        ? error.getCause() : error;
+                System.err.println("Subtitles unavailable: " + cause.getMessage());
+                // No hardcoded demo captions; video playback continues normally.
+                return;
+            }
+            subtitleTrack = track;
+            System.out.println("Subtitles: transcription received.");
+            updateSubtitleText(); // Use the current position, even after seeking.
+        }));
+    }
+
+    private void cancelSubtitleRequest() {
+        subtitleRequestGeneration++;
+        if (subtitleRequest != null) {
+            subtitleRequest.cancel(true);
+            subtitleRequest = null;
+        }
     }
 
     private void seekRelative(long offsetUs) {
