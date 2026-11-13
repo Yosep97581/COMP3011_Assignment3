@@ -175,7 +175,7 @@ public class VideoPlayerModel {
         videoDurationUs = NO_SEEK_REQUEST;
         videoFrameDurationUs = 0;
         startPlayback(0, false, NO_SEEK_REQUEST);
-        if (playbackOpen && subtitlesAvailable && audioAvailable) {
+        if (playbackOpen && subtitlesEnabled && audioAvailable) {
             requestCloudSubtitles(file);
         }
     }
@@ -239,11 +239,18 @@ public class VideoPlayerModel {
     }
 
     public void toggleSubtitles() {
-        if (subtitlesAvailable) {
-            subtitlesEnabled = !subtitlesEnabled;
-            subtitleRenderState.setEnabled(subtitlesEnabled);
-            // Update immediately, including when the video is paused.
-            updateSubtitleText();
+        // The CC button also works if subtitles were initially off at launch.
+        subtitlesEnabled = !subtitlesEnabled;
+        subtitleRenderState.setEnabled(subtitlesEnabled);
+        // Update immediately, including when the video is paused.
+        updateSubtitleText();
+
+        // Fetch subtitles only when enabled and not already cached/requested.
+        // The request stays off the JavaFX thread, so playback continues.
+        if (subtitlesEnabled && playbackOpen && audioAvailable && videoFile != null
+                && !subtitleTrackLoaded
+                && (subtitleRequest == null || subtitleRequest.isDone())) {
+            requestCloudSubtitles(videoFile);
         }
     }
 
@@ -360,7 +367,7 @@ public class VideoPlayerModel {
         openedMediaIdentity = restoredIdentity;
         startPlayback(seekTimestampUs, initiallyPaused, logicalTimestampUs);
         // Media removal can interrupt extraction. A completed track can be reused.
-        if (playbackOpen && audioAvailable && subtitlesAvailable && !subtitleTrackLoaded
+        if (playbackOpen && audioAvailable && subtitlesEnabled && !subtitleTrackLoaded
                 && (subtitleRequest == null || subtitleRequest.isDone())) {
             requestCloudSubtitles(videoFile);
         }

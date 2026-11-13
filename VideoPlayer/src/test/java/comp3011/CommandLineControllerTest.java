@@ -61,7 +61,7 @@ class CommandLineControllerTest {
     void supportsAllElevenEffects() throws IOException {
         File file = sampleVideo();
         CommandLineController cli = new CommandLineController(new String[] {
-                "-nSfwyvdjmbp", file.getPath()
+                "-nsfwyvdjmbp", file.getPath()
         });
         assertEquals(11, cli.getEffects().size());
         assertEquals(List.of(
@@ -75,7 +75,7 @@ class CommandLineControllerTest {
     void preservesExistingPlaybackOptions() throws IOException {
         File file = sampleVideo();
         CommandLineController cli = new CommandLineController(new String[] {
-                "-ax1", "-Sn", file.getPath()
+                "-ax1", "-sn", file.getPath()
         });
         assertTrue(cli.shouldLaunchApplication());
         assertTrue(cli.isAudioRequested());
@@ -88,7 +88,7 @@ class CommandLineControllerTest {
     void recognisesSubtitleShortAndLongOptions() throws IOException {
         File file = sampleVideo();
         CommandLineController cli = new CommandLineController(new String[] {
-                "-s", "--subtitle-frames", "-S", file.getPath()
+                "-S", "--subtitle-frames", "-s", file.getPath()
         });
 
         assertTrue(cli.shouldLaunchApplication());
@@ -100,12 +100,31 @@ class CommandLineControllerTest {
     void subtitleOptionWorksInStackedFlags() throws IOException {
         File file = sampleVideo();
         CommandLineController cli = new CommandLineController(new String[] {
-                "-ans", file.getPath()
+                "-anS", file.getPath()
         });
 
         assertTrue(cli.shouldLaunchApplication());
         assertTrue(cli.isAudioRequested());
         assertEquals(List.of(FrameEffect.NUMBER, FrameEffect.SUBTITLE), cli.getEffects());
+    }
+
+    @Test
+    void titanSubtitleAndFrameNumberOptions() throws IOException {
+        File file = sampleVideo();
+        CommandLineController cli = new CommandLineController(new String[] {
+                file.getPath(), "-Sn"
+        });
+        assertEquals(List.of(FrameEffect.SUBTITLE, FrameEffect.NUMBER), cli.getEffects());
+    }
+
+    @Test
+    void titanCombinedEffectsContainSubtitles() throws IOException {
+        File file = sampleVideo();
+        CommandLineController cli = new CommandLineController(new String[] {
+                file.getPath(), "-ssfdpbwSn"
+        });
+        assertTrue(cli.getEffects().contains(FrameEffect.SUBTITLE));
+        assertEquals(FrameEffect.SUBTITLE, cli.getEffects().get(7));
     }
 
     @Test

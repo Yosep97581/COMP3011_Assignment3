@@ -61,7 +61,9 @@ public class VideoPlayerController {
         view.getAudioButton().setOnAction(_ -> toggleAudioOutput());
         view.getSubtitleButton().setOnAction(_ -> toggleSubtitles());
         view.showAudioEnabled(model.isAudioOutputEnabled());
-        view.setSubtitlesAvailable(model.isSubtitlesAvailable());
+        // The button starts OFF without -S, but must still be clickable and
+        // togglable with the S key during playback.
+        view.setSubtitlesAvailable(true);
         view.showSubtitlesEnabled(model.isSubtitlesEnabled());
     }
 
@@ -126,16 +128,13 @@ public class VideoPlayerController {
     }
 
     private void toggleSubtitles() {
-        // No shortcut action unless subtitles were requested on the command line.
-        if (!model.isSubtitlesAvailable()) {
-            return;
-        }
         model.toggleSubtitles();
         view.showSubtitlesEnabled(model.isSubtitlesEnabled());
     }
 
     private void stopAndExit() {
-        model.stopPlayback();
+        // Let VideoPlayerApp.stop() clean up playback when JavaFX exits.
+        System.out.println("VideoPlayer: exit requested.");
         javafx.application.Platform.exit();
     }
 
