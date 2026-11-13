@@ -978,10 +978,10 @@ public class VideoPlayerModel {
     }
 
     private Frame grabFrame() throws Exception {
-        if (audioAvailable) {
-            return grabber.grab();
-        }
-        return grabber.grabImage();
+        // TITAN launches -Sn without -a. Skip decoding the soundtrack when
+        // audio output is muted; cloud subtitle extraction uses its own grabber.
+        // If the user enables audio later, return to reading audio/video packets.
+        return audioAvailable && audioOutputEnabled ? grabber.grab() : grabber.grabImage();
     }
 
     private void flushAudioOutput() {
