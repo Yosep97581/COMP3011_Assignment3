@@ -199,6 +199,6 @@ public class CommandLineController {
         System.out.println("Frame processors are applied in command-line order and may be repeated.");
         System.out.println("Example: -nSSnfwyvdjmbp numbers, scratches twice, numbers again, flickers,");
         System.out.println("converts, warms, vignettes, dusts, jitters, mottles, bleeds, then peppers.");
-        System.out.println("Use -s or --subtitle-frames to request subtitles (rendering comes next).");
+        System.out.println("Use -s or --subtitle-frames to request cloud subtitles.");
     }
 }

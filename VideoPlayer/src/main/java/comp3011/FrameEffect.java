@@ -54,11 +54,19 @@ public enum FrameEffect {
      * The index counts occurrences of each effect type, not the number of threads.
      */
     public static List<FrameProcessor> createProcessors(List<FrameEffect> effects) {
+        return createProcessors(effects, new SubtitleRenderState());
+    }
+
+    // Both the sequential path and each worker's processor list share the same
+    // read-only subtitle snapshots, but keep independent effect instances.
+    static List<FrameProcessor> createProcessors(List<FrameEffect> effects,
+            SubtitleRenderState subtitles) {
         EnumMap<FrameEffect, Integer> counts = new EnumMap<>(FrameEffect.class);
         List<FrameProcessor> processors = new ArrayList<>();
         for (FrameEffect effect : effects) {
             int index = counts.getOrDefault(effect, 0);
-            FrameProcessor processor = effect.createProcessor();
+            FrameProcessor processor = effect == SUBTITLE
+                    ? new FrameSubtitler(subtitles) : effect.createProcessor();
             processor.setInstanceIndex(index);
             counts.put(effect, index + 1);
             processors.add(processor);

@@ -66,6 +66,7 @@ public class VideoPlayerModel {
     private final boolean subtitlesAvailable;
     private boolean subtitlesEnabled;
     private SubtitleTrack subtitleTrack = new SubtitleTrack(List.of());
+    private final SubtitleRenderState subtitleRenderState = new SubtitleRenderState();
     // A successful request can legitimately produce zero captions; remember that too.
     private boolean subtitleTrackLoaded;
     private MediaAvailabilityMonitor mediaMonitor;
@@ -157,15 +158,17 @@ public class VideoPlayerModel {
         this.selectedEffects = List.copyOf(effects);
         subtitlesAvailable = selectedEffects.contains(FrameEffect.SUBTITLE);
         subtitlesEnabled = subtitlesAvailable;
+        subtitleRenderState.setEnabled(subtitlesEnabled);
         this.singleThreaded = Boolean.getBoolean("video.singleThreaded")
                 || Boolean.parseBoolean(System.getenv("VIDEO_SINGLE_THREADED"))
                 || selectedEffects.isEmpty();
-        this.frameProcessors = FrameEffect.createProcessors(selectedEffects);
+        this.frameProcessors = FrameEffect.createProcessors(selectedEffects, subtitleRenderState);
     }
 
     public void play(File file) {
         cancelSubtitleRequest();
         subtitleTrack = new SubtitleTrack(List.of());
+        subtitleRenderState.setTrack(subtitleTrack);
         subtitleTrackLoaded = false;
         videoFile = file;
         openedMediaIdentity = MediaAvailabilityMonitor.identity(file.toPath());
@@ -238,6 +241,7 @@ public class VideoPlayerModel {
     public void toggleSubtitles() {
         if (subtitlesAvailable) {
             subtitlesEnabled = !subtitlesEnabled;
+            subtitleRenderState.setEnabled(subtitlesEnabled);
             // Update immediately, including when the video is paused.
             updateSubtitleText();
         }
@@ -281,6 +285,7 @@ public class VideoPlayerModel {
                 return;
             }
             subtitleTrack = track;
+            subtitleRenderState.setTrack(subtitleTrack);
             subtitleTrackLoaded = true;
             System.out.println("Subtitles: transcription received.");
             updateSubtitleText(); // Use the current position, even after seeking.
@@ -345,6 +350,7 @@ public class VideoPlayerModel {
             System.out.println("Media: different file found; restarting and refreshing subtitles.");
             cancelSubtitleRequest();
             subtitleTrack = new SubtitleTrack(List.of());
+            subtitleRenderState.setTrack(subtitleTrack);
             subtitleTrackLoaded = false;
             seekTimestampUs = 0;
             logicalTimestampUs = 0;
@@ -443,7 +449,8 @@ public class VideoPlayerModel {
                 PreparedFrame frame = preparedFrame;
                 preparedFrame = new PreparedFrame(frame.image(), frame.frameNumber(),
                         frame.mediaTimestampUs(), frame.logicalTimestampUs(),
-                        frame.targetTimeNs() + pausedDuration, frame.preparedAtNs());
+                        frame.targetTimeNs() + pausedDuration, frame.preparedAtNs(),
+                        frame.subtitleText(), frame.subtitleRevision());
             }
         }
         pauseStartedNs = 0;
@@ -515,7 +522,7 @@ public class VideoPlayerModel {
                         frame.imageChannels, frame.imageStride, frameRate,
                         intFrameRate, videoFrameDurationUs, grabber.getPixelFormat());
                 processingPool = new FrameProcessingPool(videoInfo, selectedEffects,
-                        EFFECT_WORKERS, MAX_IN_FLIGHT);
+                        EFFECT_WORKERS, MAX_IN_FLIGHT, subtitleRenderState);
             }
 
             waitingForSubmission = frame;
@@ -564,7 +571,8 @@ public class VideoPlayerModel {
             preparedFrame = new PreparedFrame(
                     converter.convert(frame), result.info().frameNumber(),
                     timestampUs, logicalPlaybackBaseUs + relativeUs,
-                    playbackStartNs + relativeUs * 1_000L, System.nanoTime());
+                    playbackStartNs + relativeUs * 1_000L, System.nanoTime(),
+                    result.info().subtitleText(), result.info().subtitleRevision());
         } catch (Exception e) {
             handlePlaybackError(e);
         }
@@ -645,7 +653,8 @@ public class VideoPlayerModel {
                     timestampUs,
                     logicalTimestampUs,
                     targetTimeNs,
-                    System.nanoTime());
+                    System.nanoTime(),
+                    info.subtitleText(), info.subtitleRevision());
         }
 
         return null;
@@ -747,7 +756,14 @@ public class VideoPlayerModel {
         }
 
         notifyFrameReady(frame.image());
-        updateSubtitleText();
+        // The frame processor resolves captions on worker threads. If its
+        // snapshot became stale (e.g. CC toggled or cloud text just arrived),
+        // use the latest track to avoid flashing an outdated caption.
+        if (frame.subtitleRevision() == subtitleRenderState.revision()) {
+            publishSubtitleText(frame.subtitleText());
+        } else {
+            updateSubtitleText();
+        }
     }
 
     private void queueAudio(long timestampUs, Frame frame) {
@@ -1011,7 +1027,9 @@ public class VideoPlayerModel {
             long mediaTimestampUs,
             long logicalTimestampUs,
             long targetTimeNs,
-            long preparedAtNs) {
+            long preparedAtNs,
+            String subtitleText,
+            long subtitleRevision) {
     }
 
     private static class PendingAudio {

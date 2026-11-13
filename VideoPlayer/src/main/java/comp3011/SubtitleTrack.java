@@ -7,8 +7,8 @@ package comp3011;
 import java.util.List;
 
 /**
- * Timed subtitles for one media file. This milestone uses sample cues, but the
- * cloud response can later be converted into the same SubtitleCue objects.
+ * Timed subtitles for one media file. Cloud transcription is converted into
+ * SubtitleCue objects, which we search by timestamp during playback.
  */
 public class SubtitleTrack {
     private final List<SubtitleCue> cues;

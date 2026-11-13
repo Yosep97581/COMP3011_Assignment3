@@ -51,7 +51,12 @@ public final class FrameProcessingPool implements AutoCloseable {
 
     public FrameProcessingPool(InfoVideo videoInfo, List<FrameEffect> effects,
             int workers, int maxInFlight) {
-        this(videoInfo, () -> FrameEffect.createProcessors(List.copyOf(effects)),
+        this(videoInfo, effects, workers, maxInFlight, new SubtitleRenderState());
+    }
+
+    FrameProcessingPool(InfoVideo videoInfo, List<FrameEffect> effects,
+            int workers, int maxInFlight, SubtitleRenderState subtitles) {
+        this(videoInfo, () -> FrameEffect.createProcessors(List.copyOf(effects), subtitles),
                 workers, maxInFlight);
     }
 
